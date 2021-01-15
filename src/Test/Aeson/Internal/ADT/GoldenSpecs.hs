@@ -77,8 +77,11 @@ testConstructor Settings{..} moduleName typeName cap = do
   it ("produces the same " ++ encodingFormat ++ " as is found in " ++ goldenFile) $ do
     exists <- doesFileExist goldenFile
     if exists
-      then compareWithGolden randomMismatchOption topDir mModuleName typeName cap goldenFile
-      else createGoldenFile sampleSize cap goldenFile
+      then compareWithGolden performSideEffects randomMismatchOption topDir mModuleName typeName cap goldenFile
+      else do
+        if performSideEffects
+          then createGoldenFile sampleSize cap goldenFile
+          else expectationFailure $ "Golden file " ++ goldenFile ++ " missing. Set `performSideEffects` to True to create it."
   where
     goldenFile = mkGoldenFilePath topDir mModuleName typeName cap
     topDir = case goldenDirectoryOption of
@@ -91,8 +94,8 @@ testConstructor Settings{..} moduleName typeName cap = do
 -- | The golden files already exist. Serialize values with the same seed from
 -- the golden files of each constructor and compare.
 compareWithGolden :: forall a. (Show a, Eq a, FromJSON a, ToJSON a, ToADTArbitrary a) =>
-  RandomMismatchOption -> String -> Maybe String -> String -> ConstructorArbitraryPair a -> FilePath -> IO ()
-compareWithGolden randomOption topDir mModuleName typeName cap goldenFile = do
+  Bool -> RandomMismatchOption -> String -> Maybe String -> String -> ConstructorArbitraryPair a -> FilePath -> IO ()
+compareWithGolden performSideEffects randomOption topDir mModuleName typeName cap goldenFile = do
   goldenSeed <- readSeed =<< readFile goldenFile
   sampleSize <- readSampleSize =<< readFile goldenFile
   newSamples <- mkRandomADTSamplesForConstructor sampleSize (Proxy :: Proxy a) (capConstructor cap) goldenSeed
@@ -146,16 +149,22 @@ compareWithGolden randomOption topDir mModuleName typeName cap goldenFile = do
     faultyFile = mkFaultyFilePath topDir mModuleName typeName cap
     faultyReencodedFile = mkFaultyReencodedFilePath topDir mModuleName typeName cap
 
-    writeComparisonFile newSamples = do
-      writeFile faultyFile (encodePretty newSamples)
-      putStrLn $
-        "\n" ++
-        "INFO: Written the current encodings into " ++ faultyFile ++ "."
+    maybeWriteFile file contents message otherMessage
+      | performSideEffects = do
+        writeFile file contents
+        putStrLn $ "\n" ++ message
+      | otherwise =
+        putStrLn $ "\n" ++ otherMessage
+
+    writeComparisonFile newSamples =
+      maybeWriteFile faultyFile (encodePretty newSamples)
+        ("INFO: Written the current encodings into " ++ faultyFile ++ ".")
+        ("INFO: Set `performSideEffects` to True to write current encodings into " ++ faultyFile ++ ".")
+
     writeReencodedComparisonFile samples = do
-      writeFile faultyReencodedFile (encodePretty samples)
-      putStrLn $
-        "\n" ++
-        "INFO: Written the re-encodings into " ++ faultyReencodedFile ++ "."
+      maybeWriteFile faultyReencodedFile (encodePretty samples)
+        ("INFO: Written the re-encodings into " ++ faultyReencodedFile ++ ".")
+        ("INFO: Set `performSideEffects` to True to write re-encodings into " ++ faultyFile ++ ".")
 
 -- | The golden files do not exist. Create them for each constructor.
 createGoldenFile :: forall a. (ToJSON a, ToADTArbitrary a) =>

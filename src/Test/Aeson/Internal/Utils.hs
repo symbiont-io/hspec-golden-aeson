@@ -58,6 +58,7 @@ data Settings = Settings
   -- ^ How to construct the type name from the string version of a type
   , encodingFormat :: String
   -- ^ The encoding format that is being tested
+  , performSideEffects :: Bool
   }
 
 -- | A custom directory name or a preselected directory name.
@@ -65,7 +66,7 @@ data GoldenDirectoryOption = CustomDirectoryName String | GoldenDirectory
 
 -- | The default settings for general use cases.
 defaultSettings :: Settings
-defaultSettings = Settings GoldenDirectory False 5 FaultyFile RandomMismatchWarning id "JSON"
+defaultSettings = Settings GoldenDirectory False 5 FaultyFile RandomMismatchWarning id "JSON" True
 
 -- | put brackets around a String.
 addBrackets :: String -> String
